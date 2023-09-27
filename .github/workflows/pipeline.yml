@@ -1,0 +1,48 @@
+name: Build and release hetzner-dns docker image as tar-ball
+
+on:
+  workflow_dispatch:
+    inputs: {}
+  push:
+    branches: [ main]
+    paths-ignore:
+      - 'README.md'
+  schedule:
+    - cron:  '30 18 * * 1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up JDK 1.17
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.17
+
+      - name: Build docker image
+        run: ./build-docker-image.sh
+
+      - name: Report docker image
+        run: docker image ls --all
+
+      - name: Save docker image as tar-ball
+        run:  docker save --output hetzner-dyndns.tar hetzner-dyndns
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+        with:
+          tag_name: hetzner-dyndns-${{github.run_number}}
+          release_name: Release ${{github.run_number}} of ${{ github.ref }}
+          body: |
+            Initial Release of DynDns for Hetzner DNS
+          draft: false
+          prerelease: false
+
+      
