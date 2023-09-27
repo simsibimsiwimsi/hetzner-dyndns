@@ -3,6 +3,7 @@ package main
 import (
 	Http "net/http"
 	OS "os"
+	Strings "strings"
 
 	Bcrypt "golang.org/x/crypto/bcrypt"
 
@@ -21,7 +22,8 @@ func main() {
 	e.Use(Middleware.Recover())
 
 	e.Use(Middleware.BasicAuth(func(username, password string, c Echo.Context) (bool, error) {
-		dnsRecordName := c.QueryParam("dnsRecordName")
+		hostname := c.QueryParam("hostname")
+		dnsRecordName := Strings.Split(hostname, ".")[0]
 		userAndPassword := config.Users[dnsRecordName]
 		if userAndPassword == nil {
 			return false, nil
@@ -44,7 +46,8 @@ func main() {
 
 	e.GET("/", func(c Echo.Context) error {
 
-		dnsRecordName := c.QueryParam("dnsRecordName")
+		hostname := c.QueryParam("hostname")
+		dnsRecordName := Strings.Split(hostname, ".")[0]
 		ipv4 := c.QueryParam("ipv4")
 		ipv6 := c.QueryParam("ipv6")
 
