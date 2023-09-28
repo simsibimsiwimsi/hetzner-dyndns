@@ -1,7 +1,11 @@
 package hetzner
 
-type DnsRecordResponse struct {
+type DnsRecordsResponse struct {
 	Records []DnsRecord
+}
+
+type DnsRecordResponse struct {
+	Record DnsRecord
 }
 
 type DnsRecord struct {

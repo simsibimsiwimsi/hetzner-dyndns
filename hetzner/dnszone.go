@@ -21,150 +21,105 @@ func NewDnsZone(Id string, Token string) dnsZone {
 	}
 }
 
-func (self *dnsZone) GetRecordByName(recordName string, recordType string) (*DnsRecord, error) {
-
-	// Get Records (GET https://dns.hetzner.com/api/v1/records?zone_id={ZoneID})
+func (self *dnsZone) doRequest(request *Http.Request, response any) (any, error) {
 
 	// Create client
 	client := &Http.Client{}
 
-	// Create request
+	// Apply request headers
+	request.Header.Add("Content-Type", "application/json")
+	request.Header.Add("Auth-API-Token", self.Token)
+
+	// Fetch Request
+	httpResponse, err := client.Do(request)
+	if err != nil {
+		Format.Println("Failure : ", err)
+		return nil, err
+	}
+
+	// Read Response Body
+	httpResponseBody, _ := IO.ReadAll(httpResponse.Body)
+	if httpResponse.StatusCode != 200 {
+		return nil, Errors.New(string(httpResponseBody))
+	}
+
+	// Display Results
+	Format.Println("response Status : ", httpResponse.Status)
+	Format.Println("response Headers : ", httpResponse.Header)
+	Format.Println("response Body : ", string(httpResponseBody))
+
+	err = Json.Unmarshal(httpResponseBody, response)
+	if err != nil {
+		Format.Println(err)
+		return nil, err
+	}
+	if response == nil {
+		return nil, Errors.New("Unexpected response did not unmarshal correctly. Response was " + string(httpResponseBody))
+	}
+	return response, nil
+}
+
+func (self *dnsZone) GetRecordByName(recordName string, recordType string) (*DnsRecord, error) {
+
+	// Get Records (GET https://dns.hetzner.com/api/v1/records?zone_id={ZoneID})
 	req, err := Http.NewRequest("GET", "https://dns.hetzner.com/api/v1/records?zone_id="+self.Id, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Headers
-	req.Header.Add("Auth-API-Token", self.Token)
-
-	parseFormErr := req.ParseForm()
-	if parseFormErr != nil {
-		Format.Println(parseFormErr)
-		return nil, err
-	}
-
-	// Fetch Request
-	resp, err := client.Do(req)
-
+	response, err := self.doRequest(req, &DnsRecordsResponse{})
 	if err != nil {
-		Format.Println("Failure : ", err)
+		Format.Println("Request failed : ", err)
 		return nil, err
 	}
+	records := response.(*DnsRecordsResponse)
 
-	// Read Response Body
-	respBody, _ := IO.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return nil, Errors.New(string(respBody))
-	}
-	var records DnsRecordResponse
-
-	// Display Results
-	Format.Println("response Status : ", resp.Status)
-	Format.Println("response Headers : ", resp.Header)
-	Format.Println("response Body : ", string(respBody))
-
-	err = Json.Unmarshal(respBody, &records)
-
-	if err != nil {
-		Format.Println(err)
-		return nil, err
-	}
-
+	// find an existing record, if exists
 	for _, v := range records.Records {
 		if v.Name == recordName && v.Type == recordType {
 			return &v, nil
 		}
 	}
+
 	return nil, Errors.New("Unable to find Record " + recordName + " in DNS Zone " + self.Id)
 }
 
 func (self *dnsZone) UpdateRecord(record *DnsRecord, ip string) (*DnsRecord, error) {
+
 	// Update Record (PUT https://dns.hetzner.com/api/v1/records/{RecordID})
-
-	json := []byte(`{"value": "` + ip + `","ttl": 60,"type": "` + record.Type + `","name": "` + record.Name + `","zone_id": "` + self.Id + `"}`)
-	body := Bytes.NewBuffer(json)
-
-	// Create client
-	client := &Http.Client{}
-
-	// Create request
-	req, err := Http.NewRequest("PUT", "https://dns.hetzner.com/api/v1/records/"+record.Id, body)
+	body := []byte(`{"value": "` + ip + `","ttl": 60,"type": "` + record.Type + `","name": "` + record.Name + `","zone_id": "` + self.Id + `"}`)
+	req, err := Http.NewRequest("PUT", "https://dns.hetzner.com/api/v1/records/"+record.Id, Bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}
-	// Headers
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Auth-API-Token", self.Token)
 
-	// Fetch Request
-	resp, err := client.Do(req)
+	response, err := self.doRequest(req, &DnsRecordResponse{})
 	if err != nil {
-		Format.Println("Failure : ", err)
+		Format.Println("Request failed : ", err)
 		return nil, err
 	}
+	dnsRecordResponse := response.(*DnsRecordResponse)
 
-	// Read Response Body
-	respBody, _ := IO.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return nil, Errors.New(string(respBody))
-	}
-
-	// Display Results
-	Format.Println("response Status : ", resp.Status)
-	Format.Println("response Headers : ", resp.Header)
-	Format.Println("response Body : ", string(respBody))
-
-	err = Json.Unmarshal(respBody, &record)
-	if err != nil {
-		Format.Println(err)
-		return nil, err
-	}
-	return record, nil
+	return &dnsRecordResponse.Record, nil
 }
 
 func (self *dnsZone) CreateRecord(record *DnsRecord) (*DnsRecord, error) {
+
 	// Create Record (POST https://dns.hetzner.com/api/v1/records)
-
-	json := []byte(`{"value": "` + record.Value + `","ttl": 60,"type": "` + record.Type + `","name": "` + record.Name + `","zone_id": "` + self.Id + `"}`)
-	body := Bytes.NewBuffer(json)
-
-	// Create client
-	client := &Http.Client{}
-
-	// Create request
-	req, err := Http.NewRequest("POST", "https://dns.hetzner.com/api/v1/records", body)
+	body := []byte(`{"value": "` + record.Value + `","ttl": 60,"type": "` + record.Type + `","name": "` + record.Name + `","zone_id": "` + self.Id + `"}`)
+	req, err := Http.NewRequest("POST", "https://dns.hetzner.com/api/v1/records", Bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}
 
-	// Headers
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Auth-API-Token", self.Token)
-
-	// Fetch Request
-	resp, err := client.Do(req)
+	response, err := self.doRequest(req, &DnsRecordResponse{})
 	if err != nil {
-		Format.Println("Failure : ", err)
+		Format.Println("Request failed : ", err)
 		return nil, err
 	}
+	dnsRecordResponse := response.(*DnsRecordResponse)
 
-	// Read Response Body
-	respBody, _ := IO.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return nil, Errors.New(string(respBody))
-	}
-
-	// Display Results
-	Format.Println("response Status : ", resp.Status)
-	Format.Println("response Headers : ", resp.Header)
-	Format.Println("response Body : ", string(respBody))
-
-	err = Json.Unmarshal(respBody, &record)
-	if err != nil {
-		Format.Println(err)
-		return nil, err
-	}
-	return record, nil
+	return &dnsRecordResponse.Record, nil
 }
 
 func (self *dnsZone) CreateOrUpdateRecord(name string, ip string, recordType string) (*DnsRecord, error) {
@@ -189,13 +144,16 @@ func (self *dnsZone) CreateOrUpdateRecord(name string, ip string, recordType str
 }
 
 func (self *dnsZone) CreateOrUpdateIpV4andV6Records(name string, ipv4 string, ipv6 string) (*DnsRecord, *DnsRecord, error) {
+
 	ipv4record, err := self.CreateOrUpdateRecord(name, ipv4, "A")
 	if err != nil {
 		return nil, nil, err
 	}
+
 	ipv6record, err := self.CreateOrUpdateRecord(name, ipv6, "AAAA")
 	if err != nil {
 		return ipv4record, nil, err
 	}
+
 	return ipv4record, ipv6record, nil
 }
