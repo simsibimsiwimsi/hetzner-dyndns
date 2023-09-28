@@ -23,6 +23,11 @@ func main() {
 
 	e.Use(Middleware.BasicAuth(func(username, password string, c Echo.Context) (bool, error) {
 		hostname := c.QueryParam("hostname")
+
+		if hostname == "" {
+			c.JSON(Http.StatusBadRequest, struct{ Error string }{Error: "Query parameter hostname is missing"})
+			return false, nil
+		}
 		dnsRecordName := Strings.Split(hostname, ".")[0]
 		userAndPassword := config.Users[dnsRecordName]
 		if userAndPassword == nil {
@@ -32,7 +37,7 @@ func main() {
 		if username == userAndPassword.User && Bcrypt.CompareHashAndPassword([]byte(userAndPassword.Password), []byte(password)) == nil {
 			return true, nil
 		}
-		createPasswordHash(userAndPassword.Password)
+		createPasswordHash(userAndPassword.Password, e)
 		return false, nil
 	}))
 
@@ -49,7 +54,13 @@ func main() {
 		hostname := c.QueryParam("hostname")
 		dnsRecordName := Strings.Split(hostname, ".")[0]
 		ipv4 := c.QueryParam("ipv4")
+		if ipv4 == "" {
+			return c.JSON(Http.StatusBadRequest, struct{ Error string }{Error: "Query parameter ipv4 is missing"})
+		}
 		ipv6 := c.QueryParam("ipv6")
+		if ipv6 == "" {
+			return c.JSON(Http.StatusBadRequest, struct{ Error string }{Error: "Query parameter ipv6 is missing"})
+		}
 
 		dnsZone := Hetzner.NewDnsZone(config.Hetzner.Dns["zone-id"], config.Hetzner.Dns["auth-api-token"])
 
@@ -73,7 +84,7 @@ func main() {
 	e.Logger.Fatal(e.Start(":" + httpPort))
 }
 
-func createPasswordHash(password string) {
+func createPasswordHash(password string, e *Echo.Echo) {
 	passwordBytes, _ := Bcrypt.GenerateFromPassword([]byte(password), Bcrypt.MinCost)
-	println(string(passwordBytes))
+	e.Logger.Info("The user's password did not match. A BCrypt hash of the password (in case you want to add it) is: " + string(passwordBytes))
 }
